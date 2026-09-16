@@ -1,6 +1,6 @@
 //
 //  CrashAnnotations.swift
-//  AutopsyExtension
+//  NewsHelicopterExtension
 //
 //  What a process tells the crash reporter before it dies. The Swift runtime
 //  writes a fatal error's text here, libc an abort's reason, dyld a missing

@@ -1,6 +1,6 @@
 //
-//  AutopsyReportStore.swift
-//  Autopsy
+//  NewsHelicopterReportStore.swift
+//  NewsHelicopter
 //
 //  Where reports wait between the extension that writes them and the app that
 //  sends them: one JSON file each in a directory both can reach — an app
@@ -10,7 +10,7 @@
 
 import Foundation
 
-public struct AutopsyReportStore: Sendable {
+public struct NewsHelicopterReportStore: Sendable {
 	public let directory: URL
 
 	public init(directory: URL) {
@@ -18,7 +18,7 @@ public struct AutopsyReportStore: Sendable {
 	}
 
 	/// The store inside an app group container, at `path` under its root.
-	public init?(appGroup: String, path: String = "Autopsy") {
+	public init?(appGroup: String, path: String = "NewsHelicopter") {
 		guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { return nil }
 		self.init(directory: container.appendingPathComponent(path, isDirectory: true))
 	}
@@ -40,7 +40,7 @@ public struct AutopsyReportStore: Sendable {
 		directory.appendingPathComponent(id.uuidString.lowercased()).appendingPathExtension("json")
 	}
 
-	public func write(_ report: AutopsyReport) throws {
+	public func write(_ report: NewsHelicopterReport) throws {
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 		let data = try Self.encoder.encode(report)
 		let final = url(for: report.id)
@@ -51,14 +51,14 @@ public struct AutopsyReportStore: Sendable {
 
 	/// Every readable report, oldest capture first. A file this build cannot
 	/// decode is skipped, not deleted: a newer format is somebody else's to read.
-	public func reports() -> [AutopsyReport] {
+	public func reports() -> [NewsHelicopterReport] {
 		guard let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return [] }
 		return urls.filter { $0.pathExtension == "json" }
-			.compactMap { url in (try? Data(contentsOf: url)).flatMap { try? Self.decoder.decode(AutopsyReport.self, from: $0) } }
+			.compactMap { url in (try? Data(contentsOf: url)).flatMap { try? Self.decoder.decode(NewsHelicopterReport.self, from: $0) } }
 			.sorted { $0.capturedAt < $1.capturedAt }
 	}
 
-	public func remove(_ report: AutopsyReport) {
+	public func remove(_ report: NewsHelicopterReport) {
 		try? FileManager.default.removeItem(at: url(for: report.id))
 	}
 }

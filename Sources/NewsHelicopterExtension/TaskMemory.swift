@@ -1,6 +1,6 @@
 //
 //  TaskMemory.swift
-//  AutopsyExtension
+//  NewsHelicopterExtension
 //
 //  Reads another task's memory through its port: the corpse's in the
 //  extension, the current task's in a test — the kernel does not care which.

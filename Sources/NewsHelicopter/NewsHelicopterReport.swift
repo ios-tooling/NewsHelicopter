@@ -1,6 +1,6 @@
 //
-//  AutopsyReport.swift
-//  Autopsy
+//  NewsHelicopterReport.swift
+//  NewsHelicopter
 //
 //  Everything the extension learned from the corpse, in one Codable value.
 //  Addresses are kept whole (UInt64), never rounded through a Double: a
@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct AutopsyReport: Codable, Sendable, Identifiable {
+public struct NewsHelicopterReport: Codable, Sendable, Identifiable {
 	public static let formatVersion = 1
 
 	public var formatVersion = Self.formatVersion

@@ -1,6 +1,6 @@
 //
 //  ExceptionNames.swift
-//  AutopsyExtension
+//  NewsHelicopterExtension
 //
 //  The Mach exception vocabulary, and the signal each would have become.
 //

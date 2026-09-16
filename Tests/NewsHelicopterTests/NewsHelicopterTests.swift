@@ -1,6 +1,6 @@
 //
-//  AutopsyTests.swift
-//  AutopsyTests
+//  NewsHelicopterTests.swift
+//  NewsHelicopterTests
 //
 //  The engine reads a task's memory; the current task is a task. So the
 //  crumbs, the Mach-O walk, the thread walk and the whole report are
@@ -8,50 +8,50 @@
 //  the symbolicator stood in for.
 //
 
-import Autopsy
-import AutopsyCrumbs
-import AutopsyExtension
+import NewsHelicopter
+import NewsHelicopterCrumbs
+import NewsHelicopterExtension
 import Darwin
 import Foundation
 import MachO
 import Testing
 
-@Suite("Autopsy", .serialized)
-struct AutopsyTests {
+@Suite("NewsHelicopter", .serialized)
+struct NewsHelicopterTests {
 	// -------------------------------------------------------------- crumbs
 
 	@Test("the crumbs block records the run, the screen and the last lines in order")
 	func crumbsRoundTrip() {
-		let run = AutopsyCrumbs.beginRun(id: "run-1234")
-		AutopsyCrumbs.setScreen("Library")
-		for index in 0..<(AutopsyCrumbs.lineCount + 6) { AutopsyCrumbs.note("line \(index)") }
-		let crumbs = AutopsyCrumbs.snapshot()
+		let run = NewsHelicopterCrumbs.beginRun(id: "run-1234")
+		NewsHelicopterCrumbs.setScreen("Library")
+		for index in 0..<(NewsHelicopterCrumbs.lineCount + 6) { NewsHelicopterCrumbs.note("line \(index)") }
+		let crumbs = NewsHelicopterCrumbs.snapshot()
 		#expect(crumbs.runID == run)
 		#expect(crumbs.screen == "Library")
-		#expect(crumbs.lines.count == AutopsyCrumbs.lineCount)
+		#expect(crumbs.lines.count == NewsHelicopterCrumbs.lineCount)
 		#expect(crumbs.lines.first == "line 6")
-		#expect(crumbs.lines.last == "line \(AutopsyCrumbs.lineCount + 5)")
+		#expect(crumbs.lines.last == "line \(NewsHelicopterCrumbs.lineCount + 5)")
 	}
 
 	@Test("a block from another layout is left unread")
 	func foreignLayoutIsRefused() {
-		var data = Data(count: AutopsyCrumbsLayout.size)
+		var data = Data(count: NewsHelicopterCrumbsLayout.size)
 		data.withUnsafeMutableBytes { $0.storeBytes(of: UInt64(0x1234), as: UInt64.self) }
-		#expect(AutopsyCrumbsLayout.decode(data) == nil)
+		#expect(NewsHelicopterCrumbsLayout.decode(data) == nil)
 	}
 
 	// ------------------------------------------------------------- Mach-O
 
 	@Test("the crumbs section is found in this process's image and reads back the same")
 	func crumbsReadThroughTheSection() throws {
-		AutopsyCrumbs.setScreen("Section test")
-		AutopsyCrumbs.note("read me back")
-		let image = try #require(Self.imageContaining(UInt64(UInt(bitPattern: autopsy_crumbs_pointer()))))
+		NewsHelicopterCrumbs.setScreen("Section test")
+		NewsHelicopterCrumbs.note("read me back")
+		let image = try #require(Self.imageContaining(UInt64(UInt(bitPattern: news_helicopter_crumbs_pointer()))))
 		let machO = try #require(MachOImage(memory: .current, baseAddress: image.base))
-		let section = try #require(machO.section(AutopsyCrumbsLayout.section, in: AutopsyCrumbsLayout.segment))
-		#expect(section.address == UInt64(UInt(bitPattern: autopsy_crumbs_pointer())), "the slid section address is the block's")
+		let section = try #require(machO.section(NewsHelicopterCrumbsLayout.section, in: NewsHelicopterCrumbsLayout.segment))
+		#expect(section.address == UInt64(UInt(bitPattern: news_helicopter_crumbs_pointer())), "the slid section address is the block's")
 		let crumbs = try #require(CrumbsReader.read(executableAt: image.base, memory: .current))
-		#expect(crumbs == AutopsyCrumbs.snapshot())
+		#expect(crumbs == NewsHelicopterCrumbs.snapshot())
 	}
 
 	@Test("every loaded image parses, and the Swift runtime carries a crash-info section")
@@ -77,32 +77,32 @@ struct AutopsyTests {
 		// waiting on a semaphore, nine calls deep.
 		let parked = DispatchSemaphore(value: 0), ready = DispatchSemaphore(value: 0)
 		let thread = Thread {
-			Thread.current.name = "autopsy-parked"
+			Thread.current.name = "helicopter-parked"
 			ParkedChain.descend(9) { ready.signal(); parked.wait() }
 		}
 		thread.start()
 		ready.wait()
 		defer { parked.signal() }
 		usleep(20_000)		// let it reach the wait
-		let target = try #require(ThreadWalker.threads(of: .current).first { $0.name == "autopsy-parked" })
+		let target = try #require(ThreadWalker.threads(of: .current).first { $0.name == "helicopter-parked" })
 		#expect(target.registers["pc"] != nil)
 		#expect(target.frames.count >= 12, "nine descents, the closure, the wait and its callers: \(target.frames.count)")
 		// The bundle's binary is the one the crumbs block was linked into.
-		let bundle = try #require(Self.imageContaining(UInt64(UInt(bitPattern: autopsy_crumbs_pointer()))))
+		let bundle = try #require(Self.imageContaining(UInt64(UInt(bitPattern: news_helicopter_crumbs_pointer()))))
 		let text = try #require(MachOImage(memory: .current, baseAddress: bundle.base)?.segments.first { $0.name == "__TEXT" })
 		let ours = target.frames.filter { $0 >= text.address && $0 < text.address + text.size }
 		#expect(ours.count >= 9, "the descents are frames in this bundle: \(ours.count)")
-		#expect(target.frames == ThreadWalker.threads(of: .current).first { $0.name == "autopsy-parked" }?.frames, "a parked thread walks the same twice")
+		#expect(target.frames == ThreadWalker.threads(of: .current).first { $0.name == "helicopter-parked" }?.frames, "a parked thread walks the same twice")
 	}
 
 	// ------------------------------------------------------------- report
 
 	@Test("a report of this task names the executable, threads, images and crumbs, and survives the store")
 	func reportBuildsAndStores() throws {
-		AutopsyCrumbs.setScreen("Report test")
-		let reason = AutopsyReport.Reason(exception: EXC_BREAKPOINT, codes: [1, 0], exceptionName: "EXC_BREAKPOINT", signalName: "SIGTRAP")
-		let builder = AutopsyReportBuilder(memory: .current, images: Self.builderImages(), reason: reason) { addresses in
-			addresses.map { [AutopsyReport.Symbol(name: "sym_\($0)", offset: 0, file: nil, line: nil, isInline: false)] }
+		NewsHelicopterCrumbs.setScreen("Report test")
+		let reason = NewsHelicopterReport.Reason(exception: EXC_BREAKPOINT, codes: [1, 0], exceptionName: "EXC_BREAKPOINT", signalName: "SIGTRAP")
+		let builder = NewsHelicopterReportBuilder(memory: .current, images: Self.builderImages(), reason: reason) { addresses in
+			addresses.map { [NewsHelicopterReport.Symbol(name: "sym_\($0)", offset: 0, file: nil, line: nil, isInline: false)] }
 		}
 		let report = builder.build()
 		#expect(report.app.executable != nil)
@@ -115,7 +115,7 @@ struct AutopsyTests {
 		#expect(frame.offsetInImage == frame.address - report.images[frame.imageIndex!].baseAddress)
 		#expect(frame.symbols.first?.name == "sym_\(frame.address)")
 
-		let store = AutopsyReportStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent("autopsy-\(UUID().uuidString)"))
+		let store = NewsHelicopterReportStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent("helicopter-\(UUID().uuidString)"))
 		try store.write(report)
 		let stored = store.reports()
 		#expect(stored.count == 1)
@@ -159,11 +159,11 @@ struct AutopsyTests {
 
 	/// This process's images with the size of their code segment, which is
 	/// where every frame address falls.
-	static func builderImages() -> [AutopsyReportBuilder.Image] {
+	static func builderImages() -> [NewsHelicopterReportBuilder.Image] {
 		images().compactMap { image in
 			guard let machO = MachOImage(memory: .current, baseAddress: image.base),
 			      let text = machO.segments.first(where: { $0.name == "__TEXT" }) else { return nil }
-			return AutopsyReportBuilder.Image(path: image.path, uuid: machO.uuid, baseAddress: image.base, size: text.size)
+			return NewsHelicopterReportBuilder.Image(path: image.path, uuid: machO.uuid, baseAddress: image.base, size: text.size)
 		}
 	}
 }

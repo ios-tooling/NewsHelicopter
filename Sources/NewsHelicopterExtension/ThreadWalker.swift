@@ -1,6 +1,6 @@
 //
 //  ThreadWalker.swift
-//  AutopsyExtension
+//  NewsHelicopterExtension
 //
 //  Every thread of a task, with its registers and a frame-pointer walk of its
 //  stack. arm64 keeps the frame chain — each frame's fp points at the saved

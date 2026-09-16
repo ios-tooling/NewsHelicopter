@@ -1,6 +1,6 @@
 //
 //  MachOImage.swift
-//  AutopsyExtension
+//  NewsHelicopterExtension
 //
 //  A Mach-O image as it sits in another task: its header and load commands
 //  read through the task's memory, so a section can be found by name without
