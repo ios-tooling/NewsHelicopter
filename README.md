@@ -50,6 +50,13 @@ and give the simulator a `@main` that does nothing.
 Nothing in the extension talks to the network: its lifetime is short and
 undocumented. It writes the report and returns; the app sends it next launch.
 
+The extension runs under a **6 MB** jetsam limit, and a corpse maps some
+1,450 images whose load commands together outweigh that — so the engine
+parses each image once and lets it go, and the report carries only the
+images frames land in. A real crash on an iPhone 15 Pro Max took ~320 ms at
+a ~3 MB footprint; every report records both (`elapsedMilliseconds`,
+`memoryFootprintBytes`), so the budget is measured, not guessed.
+
 ## The app
 
 ```swift
