@@ -19,6 +19,11 @@ public struct ThreadSnapshot: Sendable {
 	public let registers: [String: UInt64]
 	/// Return addresses, innermost first: the pc, then each caller.
 	public let frames: [UInt64]
+	/// Whether `frames[1]` is the link register rather than a saved return
+	/// address — a guess at a leaf function's caller that symbols can confirm
+	/// or refute: a link register still inside `frames[0]`'s own function is
+	/// no caller at all.
+	public let secondFrameIsLinkRegister: Bool
 	/// The kernel recorded a fault on this thread — the one that crashed, when
 	/// the crash was a fault rather than a signal.
 	public var faulted: Bool { (registers["exception"] ?? 0) != 0 }
@@ -44,6 +49,7 @@ public enum ThreadWalker {
 	static func snapshot(of thread: thread_act_t, memory: TaskMemory, frameLimit: Int) -> ThreadSnapshot {
 		var registers: [String: UInt64] = [:]
 		var frames: [UInt64] = []
+		var usedLinkRegister = false
 		#if arch(arm64)
 			var state = arm_thread_state64_t()
 			var stateCount = mach_msg_type_number_t(MemoryLayout<arm_thread_state64_t>.size / MemoryLayout<natural_t>.size)
@@ -55,7 +61,7 @@ public enum ThreadWalker {
 			if got == KERN_SUCCESS {
 				let pc = strip(state.__pc), lr = strip(state.__lr), fp = strip(state.__fp), sp = strip(state.__sp)
 				registers = ["pc": pc, "lr": lr, "fp": fp, "sp": sp]
-				frames = walk(pc: pc, lr: lr, fp: fp, memory: memory, limit: frameLimit)
+				(frames, usedLinkRegister) = walk(pc: pc, lr: lr, fp: fp, memory: memory, limit: frameLimit)
 			}
 			var exception = arm_exception_state64_t()
 			var exceptionCount = mach_msg_type_number_t(MemoryLayout<arm_exception_state64_t>.size / MemoryLayout<natural_t>.size)
@@ -70,13 +76,14 @@ public enum ThreadWalker {
 				registers["exception"] = UInt64(exception.__exception)
 			}
 		#endif
-		return ThreadSnapshot(id: identifier(of: thread), name: name(of: thread), registers: registers, frames: frames)
+		return ThreadSnapshot(id: identifier(of: thread), name: name(of: thread), registers: registers, frames: frames,
+		                      secondFrameIsLinkRegister: usedLinkRegister)
 	}
 
 	/// pc first; then the callers off the frame chain. The link register is
 	/// the caller of a leaf that has not saved it yet, so it goes second
 	/// unless the chain already starts with it.
-	static func walk(pc: UInt64, lr: UInt64, fp: UInt64, memory: TaskMemory, limit: Int) -> [UInt64] {
+	static func walk(pc: UInt64, lr: UInt64, fp: UInt64, memory: TaskMemory, limit: Int) -> (frames: [UInt64], usedLinkRegister: Bool) {
 		var frames = [pc]
 		var chain: [UInt64] = []
 		var frame = fp
@@ -90,9 +97,10 @@ public enum ThreadWalker {
 			previous = frame
 			frame = savedFP
 		}
-		if lr != 0, chain.first != lr { frames.append(lr) }
+		let usedLinkRegister = lr != 0 && chain.first != lr
+		if usedLinkRegister { frames.append(lr) }
 		frames.append(contentsOf: chain)
-		return Array(frames.prefix(limit))
+		return (Array(frames.prefix(limit)), usedLinkRegister)
 	}
 
 	/// Pointer authentication keeps its signature in the top bits; an address

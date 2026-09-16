@@ -66,7 +66,7 @@ public struct NewsHelicopterReportBuilder {
 		let table = ImageTable(indices: Set(located.values.compactMap { $0 } + [executable].compactMap { $0 }))
 		var threads = snapshots.enumerated().map { index, snapshot in
 			NewsHelicopterReport.Thread(index: index, id: snapshot.id, name: snapshot.name, queueName: nil, isCrashed: false,
-			                            frames: snapshot.frames.map { frame(at: $0, in: sorted, located: located[$0] ?? nil, table: table, symbols: symbols) },
+			                            frames: frames(of: snapshot, symbols: symbols).map { frame(at: $0, in: sorted, located: located[$0] ?? nil, table: table, symbols: symbols) },
 			                            registers: snapshot.registers)
 		}
 		if let crashed = crashedIndex(snapshots: snapshots, threads: threads) {

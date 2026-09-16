@@ -16,18 +16,29 @@ extension NewsHelicopterReportBuilder {
 		                           offsetInImage: located.map { address - images[$0].baseAddress }, symbols: symbols[address] ?? [])
 	}
 
-	/// The image whose range holds the address, as an index into `images`
-	/// (sorted by base), or nil for an address no image maps.
+	/// The image an address belongs to, as an index into `images` (sorted by
+	/// base): the one with the greatest base at or below it, if its range
+	/// reaches. Ranges overlap in the shared cache — a dylib's span runs from
+	/// its text to its linkedit, across other dylibs' text — so the nearest
+	/// base is the rule, not the first range that contains the address.
 	func locate(_ address: UInt64, in images: [Image]) -> Int? {
-		var low = 0, high = images.count - 1
+		var low = 0, high = images.count - 1, nearest: Int?
 		while low <= high {
 			let middle = (low + high) / 2
-			let image = images[middle]
-			if address < image.baseAddress { high = middle - 1 }
-			else if address >= image.baseAddress + image.size { low = middle + 1 }
-			else { return middle }
+			if images[middle].baseAddress <= address { nearest = middle; low = middle + 1 } else { high = middle - 1 }
 		}
-		return nil
+		guard let nearest, address < images[nearest].baseAddress + images[nearest].size else { return nil }
+		return nearest
+	}
+
+	/// The frames a thread reports: the walk's, less a link-register guess
+	/// that symbols show to be inside the crashing function itself.
+	func frames(of snapshot: ThreadSnapshot, symbols: [UInt64: [NewsHelicopterReport.Symbol]]) -> [UInt64] {
+		guard snapshot.secondFrameIsLinkRegister, snapshot.frames.count > 1,
+		      let first = symbols[snapshot.frames[0]]?.last?.name, symbols[snapshot.frames[1]]?.last?.name == first else { return snapshot.frames }
+		var frames = snapshot.frames
+		frames.remove(at: 1)
+		return frames
 	}
 
 	/// The images the report carries: a subset of the sorted list, renumbered

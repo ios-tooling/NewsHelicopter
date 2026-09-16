@@ -10,7 +10,7 @@
 
 import NewsHelicopter
 import NewsHelicopterCrumbs
-import NewsHelicopterExtension
+@testable import NewsHelicopterExtension
 import Darwin
 import Foundation
 import MachO
@@ -127,6 +127,30 @@ struct NewsHelicopterTests {
 		#expect(stored.first?.crumbs == report.crumbs)
 		store.remove(report)
 		#expect(store.reports().isEmpty)
+	}
+
+	@Test("an address belongs to the image with the nearest base, whatever ranges overlap")
+	func locateByNearestBase() {
+		typealias Image = NewsHelicopterReportBuilder.Image
+		// A shared-cache dylib's span reaches across the next dylib's text.
+		let images = [Image(path: "/usr/lib/a.dylib", uuid: nil, baseAddress: 0x1000, size: 0x10000),
+		              Image(path: "/usr/lib/b.dylib", uuid: nil, baseAddress: 0x2000, size: 0x1000)]
+		let builder = NewsHelicopterReportBuilder(memory: .current, images: images, reason: .init(exception: 1, codes: [], exceptionName: "", signalName: nil)) { _ in [] }
+		#expect(builder.locate(0x1500, in: images) == 0)
+		#expect(builder.locate(0x2500, in: images) == 1, "b, not a, though a's range holds it too")
+		#expect(builder.locate(0x0800, in: images) == nil)
+		#expect(builder.locate(0x3500, in: images) == nil, "past b's range, nothing claims it")
+	}
+
+	@Test("a link-register frame inside the crashing function is dropped; a real caller stays")
+	func linkRegisterFrame() {
+		let builder = NewsHelicopterReportBuilder(memory: .current, images: [], reason: .init(exception: 1, codes: [], exceptionName: "", signalName: nil)) { _ in [] }
+		func symbol(_ name: String) -> [NewsHelicopterReport.Symbol] { [.init(name: name, offset: 0, file: nil, line: nil, isInline: false)] }
+		let guessed = ThreadSnapshot(id: 1, name: nil, registers: [:], frames: [0x10, 0x20, 0x30], secondFrameIsLinkRegister: true)
+		#expect(builder.frames(of: guessed, symbols: [0x10: symbol("trap"), 0x20: symbol("trap"), 0x30: symbol("caller")]) == [0x10, 0x30])
+		#expect(builder.frames(of: guessed, symbols: [0x10: symbol("leaf"), 0x20: symbol("caller")]) == [0x10, 0x20, 0x30])
+		let walked = ThreadSnapshot(id: 1, name: nil, registers: [:], frames: [0x10, 0x20, 0x30], secondFrameIsLinkRegister: false)
+		#expect(builder.frames(of: walked, symbols: [0x10: symbol("f"), 0x20: symbol("f")]) == [0x10, 0x20, 0x30], "a saved return address is never second-guessed")
 	}
 
 	@Test("Mach exceptions name their signal")
