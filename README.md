@@ -34,7 +34,12 @@ struct MyCrashReporter: CrashReporterExtension {
 }
 ```
 
-The extension target: a child bundle id (`com.example.app.crash-reporter`),
+The extension target is an ExtensionKit extension — Xcode's Crash Reporter
+Extension template, or by hand: product type
+`com.apple.product-type.extensionkit-extension`, embedded by an "Embed
+ExtensionKit Extensions" phase into the app's `Extensions/` folder (not
+`PlugIns/`, where installd expects an `NSExtension` dictionary and refuses
+the app) — with a child bundle id (`com.example.app.crash-reporter`),
 `EXAppExtensionAttributes/EXExtensionPointIdentifier =
 com.apple.crash-reporter.extension` in its Info.plist, the same App Group as
 the app, and deployment targets of iOS 27 / macOS 27 (the app's can stay
