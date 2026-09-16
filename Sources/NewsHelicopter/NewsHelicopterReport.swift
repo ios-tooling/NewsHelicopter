@@ -25,11 +25,14 @@ public struct NewsHelicopterReport: Codable, Sendable, Identifiable {
 	public let annotations: [Annotation]
 	/// The app's own breadcrumbs, if its executable carries the block.
 	public let crumbs: Crumbs?
-	/// How long the extension took, so its budget can be learned rather than guessed.
+	/// How long the extension took, and how much memory it was charged for at
+	/// the end — its budgets (a few megabytes, an undocumented moment) are
+	/// learned from reports, not guessed.
 	public let elapsedMilliseconds: Double
+	public let memoryFootprintBytes: UInt64?
 
 	public init(id: UUID = UUID(), capturedAt: Date = .now, app: App, reason: Reason, images: [Image], threads: [Thread],
-	            annotations: [Annotation], crumbs: Crumbs?, elapsedMilliseconds: Double) {
+	            annotations: [Annotation], crumbs: Crumbs?, elapsedMilliseconds: Double, memoryFootprintBytes: UInt64? = nil) {
 		self.id = id
 		self.capturedAt = capturedAt
 		self.app = app
@@ -39,6 +42,7 @@ public struct NewsHelicopterReport: Codable, Sendable, Identifiable {
 		self.annotations = annotations
 		self.crumbs = crumbs
 		self.elapsedMilliseconds = elapsedMilliseconds
+		self.memoryFootprintBytes = memoryFootprintBytes
 	}
 
 	public struct App: Codable, Sendable {

@@ -34,7 +34,7 @@ public struct NewsHelicopterReporter {
 	@discardableResult
 	public func process(_ process: CrashedProcess) -> NewsHelicopterReport? {
 		let report = report(for: process)
-		log.notice("Crash: \(report.reason.exceptionName, privacy: .public) \(report.headline ?? "", privacy: .public); \(report.threads.count) threads in \(report.elapsedMilliseconds, privacy: .public) ms")
+		log.notice("Crash: \(report.reason.exceptionName, privacy: .public) \(report.headline ?? "", privacy: .public); \(report.threads.count) threads in \(report.elapsedMilliseconds, privacy: .public) ms, footprint \((report.memoryFootprintBytes ?? 0) / 1024, privacy: .public) KB")
 		do {
 			try store.write(report)
 			return report

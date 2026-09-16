@@ -40,46 +40,47 @@ public struct NewsHelicopterReportBuilder {
 	public func build() -> NewsHelicopterReport {
 		let started = ContinuousClock.now
 		let sorted = images.sorted { $0.baseAddress < $1.baseAddress }
-		let parsed = sorted.map { MachOImage(memory: memory, baseAddress: $0.baseAddress) }
-		let executable = zip(sorted, parsed).first { $1?.isExecutable == true }?.0
+		// One pass, each image parsed and let go in turn: a corpse maps well over
+		// a thousand images, and their load commands together outweigh the few
+		// megabytes an extension is allowed before jetsam takes it.
+		var executable: Int?
+		var annotations: [NewsHelicopterReport.Annotation] = []
+		var crumbs: NewsHelicopterReport.Crumbs?
+		for (index, image) in sorted.enumerated() {
+			guard let machO = MachOImage(memory: memory, baseAddress: image.baseAddress) else { continue }
+			if executable == nil, machO.isExecutable { executable = index }
+			if let found = CrashAnnotations.read(image: machO, named: (image.path as NSString).lastPathComponent) {
+				annotations.append(NewsHelicopterReport.Annotation(image: found.image, message: found.message, message2: found.message2,
+				                                                    signature: found.signature, abortCause: found.abortCause))
+			}
+			// The app's executable carries the block; a test host's does not, and
+			// its bundle's binary does, so any image will do.
+			if crumbs == nil { crumbs = CrumbsReader.read(image: machO) }
+		}
 		let snapshots = ThreadWalker.threads(of: memory, frameLimit: frameLimit, threadLimit: threadLimit)
 		let addresses = Array(Set(snapshots.flatMap(\.frames))).sorted()
 		let symbols = Dictionary(uniqueKeysWithValues: zip(addresses, symbolicate(addresses)))
+		// Only the images a frame lands in ride along, plus the executable:
+		// nobody reading the report wants the other fourteen hundred.
+		let located = Dictionary(uniqueKeysWithValues: addresses.map { ($0, locate($0, in: sorted)) })
+		let table = ImageTable(indices: Set(located.values.compactMap { $0 } + [executable].compactMap { $0 }))
 		var threads = snapshots.enumerated().map { index, snapshot in
 			NewsHelicopterReport.Thread(index: index, id: snapshot.id, name: snapshot.name, queueName: nil, isCrashed: false,
-			                     frames: snapshot.frames.map { frame(at: $0, images: sorted, symbols: symbols[$0] ?? []) },
-			                     registers: snapshot.registers)
+			                            frames: snapshot.frames.map { frame(at: $0, in: sorted, located: located[$0] ?? nil, table: table, symbols: symbols) },
+			                            registers: snapshot.registers)
 		}
 		if let crashed = crashedIndex(snapshots: snapshots, threads: threads) {
 			let thread = threads[crashed]
 			threads[crashed] = NewsHelicopterReport.Thread(index: thread.index, id: thread.id, name: thread.name, queueName: thread.queueName,
-			                                        isCrashed: true, frames: thread.frames, registers: thread.registers)
+			                                               isCrashed: true, frames: thread.frames, registers: thread.registers)
 		}
-		let annotations = zip(sorted, parsed).compactMap { image, machO in
-			machO.flatMap { CrashAnnotations.read(image: $0, named: (image.path as NSString).lastPathComponent) }
-		}.map { NewsHelicopterReport.Annotation(image: $0.image, message: $0.message, message2: $0.message2, signature: $0.signature, abortCause: $0.abortCause) }
-		// The app's executable carries the block; a test host's does not, and
-		// its bundle's binary does, so any image will do.
-		let crumbs = parsed.lazy.compactMap { $0 }.compactMap(CrumbsReader.read(image:)).first
 		let elapsed = ContinuousClock.now - started
-		return NewsHelicopterReport(app: appInfo(executable: executable), reason: reason,
-		                     images: sorted.map { NewsHelicopterReport.Image(path: $0.path, uuid: $0.uuid, baseAddress: $0.baseAddress, size: $0.size) },
-		                     threads: threads, annotations: annotations, crumbs: crumbs,
-		                     elapsedMilliseconds: Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15)
-	}
-
-	func frame(at address: UInt64, images: [Image], symbols: [NewsHelicopterReport.Symbol]) -> NewsHelicopterReport.Frame {
-		// The image whose range holds the address; images are sorted by base.
-		var low = 0, high = images.count - 1, found: Int?
-		while low <= high {
-			let middle = (low + high) / 2
-			let image = images[middle]
-			if address < image.baseAddress { high = middle - 1 }
-			else if address >= image.baseAddress + image.size { low = middle + 1 }
-			else { found = middle; break }
-		}
-		return NewsHelicopterReport.Frame(address: address, imageIndex: found,
-		                           offsetInImage: found.map { address - images[$0].baseAddress }, symbols: symbols)
+		return NewsHelicopterReport(app: appInfo(executable: executable.map { sorted[$0] }), reason: reason,
+		                            images: table.sortedIndices.map { NewsHelicopterReport.Image(path: sorted[$0].path, uuid: sorted[$0].uuid,
+		                                                                                         baseAddress: sorted[$0].baseAddress, size: sorted[$0].size) },
+		                            threads: threads, annotations: annotations, crumbs: crumbs,
+		                            elapsedMilliseconds: Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15,
+		                            memoryFootprintBytes: ProcessFootprint.bytes)
 	}
 
 	/// The faulting thread when the kernel marked one; else the thread that
