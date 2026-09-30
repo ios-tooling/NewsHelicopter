@@ -82,22 +82,31 @@ public enum ThreadWalker {
 
 	/// pc first; then the callers off the frame chain. The link register is
 	/// the caller of a leaf that has not saved it yet, so it goes second
-	/// unless the chain already starts with it.
+	/// unless the chain already starts with it. An async frame's callers are
+	/// its task's continuations, not the stack below it (see `asyncCallers`).
 	static func walk(pc: UInt64, lr: UInt64, fp: UInt64, memory: TaskMemory, limit: Int) -> (frames: [UInt64], usedLinkRegister: Bool) {
 		var frames = [pc]
 		var chain: [UInt64] = []
+		var firstSaved: UInt64?
 		var frame = fp
 		var previous: UInt64 = 0
 		while frame != 0, frame & 0xF == 0, frame > previous, chain.count < limit,
 		      let saved = memory.read(frame, count: 16) {
-			let savedFP = strip(saved.load(UInt64.self, at: 0))
+			let rawFP = saved.load(UInt64.self, at: 0)
 			let returnAddress = strip(saved.load(UInt64.self, at: 8))
+			if firstSaved == nil { firstSaved = returnAddress }
+			if isAsyncFrame(rawFP) {
+				if let context = memory.read(UInt64.self, at: frame - 8) {
+					chain += asyncCallers(context: context, memory: memory, limit: limit - chain.count)
+				}
+				break
+			}
 			guard returnAddress != 0 else { break }
 			chain.append(returnAddress)
 			previous = frame
-			frame = savedFP
+			frame = strip(rawFP)
 		}
-		let usedLinkRegister = lr != 0 && chain.first != lr
+		let usedLinkRegister = lr != 0 && firstSaved != lr
 		if usedLinkRegister { frames.append(lr) }
 		frames.append(contentsOf: chain)
 		return (Array(frames.prefix(limit)), usedLinkRegister)

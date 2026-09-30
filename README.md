@@ -13,8 +13,9 @@ does with it, and what the app leaves for it to find.
   of one-JSON-file-per-report — an app group's, so the extension writes and
   the app reads.
 - **NewsHelicopterExtension** — the engine: cross-task memory reads, a Mach-O
-  section finder, an arm64 frame-pointer walk of every thread, the
-  `__crash_info` annotations (the Swift fatal error text, an abort message,
+  section finder, an arm64 frame-pointer walk of every thread (following a
+  Swift task's async-context chain from its first async frame, as Apple's
+  reporter does), the `__crash_info` annotations (the Swift fatal error text, an abort message,
   dyld's complaint), the crumbs, and on-device symbolication. Only its last
   step, `NewsHelicopterReporter`, needs Apple's framework; the rest reads any task,
   which is how the tests exercise it against their own process.
