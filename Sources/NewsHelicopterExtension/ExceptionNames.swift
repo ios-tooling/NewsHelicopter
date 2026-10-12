@@ -28,37 +28,35 @@ public enum ExceptionNames {
 		}
 	}
 
-	/// The signal a Mach exception is delivered as — SIGSEGV for a bad
-	/// access, SIGTRAP for the `brk` a Swift trap executes. EXC_CRASH and a
-	/// soft-signal EXC_SOFTWARE carry the signal in their codes.
+	/// The reason with everything the codes say decoded: the signal, the
+	/// termination reason, an EXC_RESOURCE's limit.
+	public static func reason(exception: Int32, codes: [UInt64]) -> NewsHelicopterReport.Reason {
+		NewsHelicopterReport.Reason(exception: exception, codes: codes, exceptionName: name(exception),
+		                            signalName: signalName(exception: exception, codes: codes),
+		                            terminationReason: .decode(codes: codes),
+		                            resourceLimit: .decode(exception: exception, codes: codes))
+	}
+
+	/// The signal the process died of. A termination reason that names one
+	/// wins; otherwise the signal a Mach exception is delivered as — SIGSEGV
+	/// for a bad access, SIGTRAP for the `brk` a Swift trap executes — read
+	/// from the Mach codes only when the codes are those (not the extension's
+	/// `[EXC_CRASH, reason]`). EXC_RESOURCE and EXC_GUARD name no signal of
+	/// their own: a kill is only reported as SIGKILL when the reason says so.
 	public static func signalName(exception: Int32, codes: [UInt64]) -> String? {
+		let termination = NewsHelicopterReport.TerminationReason.decode(codes: codes)
+		if let signal = termination?.signalName { return signal }
+		let machCodes = !NewsHelicopterReport.TerminationReason.isCorpseLayout(codes)
 		switch exception {
-		case EXC_BAD_ACCESS: return codes.first == UInt64(KERN_INVALID_ADDRESS) ? "SIGSEGV" : "SIGBUS"
+		case EXC_BAD_ACCESS where machCodes && !codes.isEmpty: return codes[0] == UInt64(KERN_INVALID_ADDRESS) ? "SIGSEGV" : "SIGBUS"
 		case EXC_BAD_INSTRUCTION: return "SIGILL"
 		case EXC_ARITHMETIC: return "SIGFPE"
 		case EXC_BREAKPOINT: return "SIGTRAP"
-		case EXC_SOFTWARE where codes.first == 0x10003 && codes.count > 1: return signal(Int32(truncatingIfNeeded: codes[1]))
-		case EXC_CRASH where !codes.isEmpty: return signal(Int32((codes[0] >> 24) & 0xFF))
-		case EXC_GUARD: return "SIGKILL"
-		case EXC_RESOURCE: return "SIGKILL"
+		case EXC_SOFTWARE where machCodes && codes.first == 0x10003 && codes.count > 1: return signal(Int32(truncatingIfNeeded: codes[1]))
+		case EXC_CRASH where machCodes && !codes.isEmpty: return signal(Int32((codes[0] >> 24) & 0xFF))
 		default: return nil
 		}
 	}
 
-	static func signal(_ number: Int32) -> String? {
-		switch number {
-		case SIGABRT: "SIGABRT"
-		case SIGBUS: "SIGBUS"
-		case SIGFPE: "SIGFPE"
-		case SIGILL: "SIGILL"
-		case SIGKILL: "SIGKILL"
-		case SIGSEGV: "SIGSEGV"
-		case SIGTRAP: "SIGTRAP"
-		case SIGTERM: "SIGTERM"
-		case SIGSYS: "SIGSYS"
-		case SIGPIPE: "SIGPIPE"
-		case 0: nil
-		default: "SIG\(number)"
-		}
-	}
+	static func signal(_ number: Int32) -> String? { NewsHelicopterReport.signalName(number) }
 }

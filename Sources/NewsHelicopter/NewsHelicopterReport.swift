@@ -63,9 +63,20 @@ public struct NewsHelicopterReport: Codable, Sendable, Identifiable {
 		/// The exception's name, and the signal it would have been delivered as.
 		public let exceptionName: String
 		public let signalName: String?
-		public init(exception: Int32, codes: [UInt64], exceptionName: String, signalName: String?) {
+		/// Why the process was let go, decoded from the codes; nil when they
+		/// carry no reason, and absent from reports written before 0.2.0.
+		public let terminationReason: TerminationReason?
+		/// An EXC_RESOURCE's limit, when its codes are the Mach exception's own.
+		public let resourceLimit: ResourceLimit?
+		public init(exception: Int32, codes: [UInt64], exceptionName: String, signalName: String?,
+		            terminationReason: TerminationReason? = nil, resourceLimit: ResourceLimit? = nil) {
 			self.exception = exception; self.codes = codes; self.exceptionName = exceptionName; self.signalName = signalName
+			self.terminationReason = terminationReason; self.resourceLimit = resourceLimit
 		}
+
+		/// The stored reason, or for a report an older extension wrote, the
+		/// one its codes decode to.
+		public var termination: TerminationReason? { terminationReason ?? TerminationReason.decode(codes: codes) }
 	}
 
 	public struct Image: Codable, Sendable {
@@ -127,8 +138,9 @@ public struct NewsHelicopterReport: Codable, Sendable, Identifiable {
 		public init(image: String, message: String?, message2: String?, signature: String?, abortCause: UInt64) {
 			self.image = image; self.message = message; self.message2 = message2; self.signature = signature; self.abortCause = abortCause
 		}
-		/// The line a person would want first.
-		public var text: String? { [message, message2].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n").nonEmpty }
+		/// The line a person would want first. A message that is not readable
+		/// text — CoreUI has left raw bytes here — is left out.
+		public var text: String? { [message, message2].compactMap { $0 }.filter(\.isReadableText).joined(separator: "\n").nonEmpty }
 	}
 
 	public struct Crumbs: Codable, Sendable, Equatable {
@@ -148,4 +160,13 @@ public struct NewsHelicopterReport: Codable, Sendable, Identifiable {
 
 extension String {
 	var nonEmpty: String? { isEmpty ? nil : self }
+
+	/// Not empty, and nothing in it that a C string's bytes failed to decode
+	/// to (U+FFFD) or a control character other than a line break or tab.
+	var isReadableText: Bool {
+		!isEmpty && unicodeScalars.allSatisfy { scalar in
+			scalar == "\n" || scalar == "\r" || scalar == "\t"
+				|| (scalar != "\u{FFFD}" && scalar.properties.generalCategory != .control)
+		}
+	}
 }

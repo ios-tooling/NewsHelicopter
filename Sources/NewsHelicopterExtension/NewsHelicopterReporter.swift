@@ -34,7 +34,7 @@ public struct NewsHelicopterReporter {
 	@discardableResult
 	public func process(_ process: CrashedProcess) -> NewsHelicopterReport? {
 		let report = report(for: process)
-		log.notice("Crash: \(report.reason.exceptionName, privacy: .public) \(report.headline ?? "", privacy: .public); \(report.threads.count) threads in \(report.elapsedMilliseconds, privacy: .public) ms, footprint \((report.memoryFootprintBytes ?? 0) / 1024, privacy: .public) KB")
+		log.notice("Crash: \(report.reason.exceptionName, privacy: .public) \(report.reason.terminationReason?.name ?? "", privacy: .public) \(report.headline ?? "", privacy: .public); \(report.threads.count) threads in \(report.elapsedMilliseconds, privacy: .public) ms, footprint \((report.memoryFootprintBytes ?? 0) / 1024, privacy: .public) KB")
 		do {
 			try store.write(report)
 			return report
@@ -50,9 +50,7 @@ public struct NewsHelicopterReporter {
 		var builder = NewsHelicopterReportBuilder(
 			memory: TaskMemory(task: process.corpsePort),
 			images: process.binaryImages.map { NewsHelicopterReportBuilder.Image(path: $0.path, uuid: $0.uuid, baseAddress: $0.baseAddress, size: $0.size) },
-			reason: NewsHelicopterReport.Reason(exception: reason.exception, codes: reason.codes,
-			                             exceptionName: ExceptionNames.name(reason.exception),
-			                             signalName: ExceptionNames.signalName(exception: reason.exception, codes: reason.codes)),
+			reason: ExceptionNames.reason(exception: reason.exception, codes: reason.codes),
 			symbolicate: { addresses in
 				process.symbolicateAddresses(addresses).map { frames in
 					frames.map { NewsHelicopterReport.Symbol(name: $0.symbol, offset: $0.symbolOffset, file: $0.sourceFile, line: $0.sourceLine, isInline: $0.isInline) }

@@ -70,10 +70,24 @@ for report in store.reports() {          // next launch
 }
 ```
 
-`NewsHelicopterReport` carries the Mach reason (and its signal), every image with
+`NewsHelicopterReport` carries the Mach reason (its signal, the decoded
+termination reason, an EXC_RESOURCE's limit), every image with
 its UUID, every thread with registers and frames (address, image, offset,
 and whatever the device symbolicated), the annotations, the crumbs, and how
 long the extension took — so its budget can be learned rather than guessed.
 
-Not covered, by design: hangs, watchdog kills and jetsam are not Mach
-exceptions and never reach a crash extension. Keep MetricKit for those.
+## The codes
+
+The extension is not handed the Mach exception's own codes. On iOS 27.0.1
+every report's `codes` were `[10, reason]` whatever the exception: 10 is
+EXC_CRASH, and the second code is the kernel's `os_reason` packed as
+`(namespace << 32) | code` — `0xA_8BADF00D` a FrontBoard watchdog kill,
+`0x1_00000007` jetsam's per-process memory limit. `TerminationReason`
+decodes it (namespaces from xnu's `sys/reason.h`, jetsam causes from
+`sys/kern_memorystatus.h`), and the signal is only named where something
+decoded says which: the Mach codes when the codes are those, a SIGNAL
+reason, or SIGKILL for the jetsam, FrontBoard and RunningBoard kills. The
+SDK documents the codes only as "exception-specific", so this layout is
+read from production reports; codes in the Mach layout still decode as
+before. Watchdog and jetsam kills do reach the extension (as EXC_CRASH and
+EXC_RESOURCE); hangs do not. Keep MetricKit for those.
