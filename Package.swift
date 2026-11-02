@@ -12,7 +12,7 @@ import PackageDescription
 // builds and tests on any host by reading the current task.
 let package = Package(
 	name: "NewsHelicopter",
-	platforms: [.macOS(.v15), .iOS(.v18)],
+	platforms: [.macOS(.v14), .iOS(.v18)],
 	products: [
 		.library(name: "NewsHelicopter", targets: ["NewsHelicopter"]),
 		.library(name: "NewsHelicopterExtension", targets: ["NewsHelicopterExtension"]),
